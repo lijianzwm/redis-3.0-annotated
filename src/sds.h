@@ -28,6 +28,16 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+/**
+ * 简单动态字符串（simple dynamic string，SDS）
+ * SDS是redis自己构建的一种数据类型，Redis没有直接使用C语言传统的字符串，而是默认使用SDS
+ * 在Redis的数据库里面，包含字符串值的键值对在底层都是由SDS实现的（键和值都是SDS）
+ *
+ *   除了用来保存数据库中的字符串值之外，SDS还被用作缓冲区（buffer）：
+ *      AOF模块中的AOF缓冲区
+ *      客户端状态中的输入缓冲区
+ */
+
 #ifndef __SDS_H
 #define __SDS_H
 
@@ -39,46 +49,56 @@
 #include <sys/types.h>
 #include <stdarg.h>
 
-/*
- * 类型别名，用于指向 sdshdr 的 buf 属性
- */
-typedef char *sds;
+typedef char *sds;  //指向 sdshdr 的 buf 属性
 
 /*
  * 保存字符串对象的结构
  */
 struct sdshdr {
-    
-    // buf 中已占用空间的长度
-    int len;
 
-    // buf 中剩余可用空间的长度
-    int free;
+    int len;    // buf 中已占用空间的长度
+    int free;   // buf 中剩余可用空间的长度
 
-    // 数据空间
-    char buf[];
+    /**
+     * SDS遵循C字符串以空字符结尾的惯例，保存空字符的1字节空间不计算在SDS的len属性里面，
+     * 并且为空字符分配额外的1字节空间，以及添加空字符到字符串末尾等操作，都是由SDS函数自动完成的，
+     * 所以这个空字符对于SDS的使用者来说是完全透明的。
+     * 遵循空字符结尾这一惯例的好处是，SDS可以直接重用一部分C字符串函数库里面的函数
+     * buf[] -- “R'、'e'、'd'、'i'、's'、'\0'
+     */
+    char buf[]; //数据空间
+
 };
 
-/*
- * 返回 sds 实际保存的字符串的长度
- *
- * T = O(1)
+/**
+ * 返回sds实际保存的字符串的长度，T = O(1)
+ * 原生C字符串获取字符串长度时，需要依次遍历字符串中的每个值，直到遇到\0为止 T = O(N)，
+ * 这里性能上SDS优于原生C字符串
  */
 static inline size_t sdslen(const sds s) {
-    struct sdshdr *sh = (void*)(s-(sizeof(struct sdshdr)));
+    /**
+     * sdshdr *sh = (void*)(s-(sizeof(struct sdshdr)))
+     * s是指向sdshdr中buf属性的指针，s的位置减去sizeof(struct sdshdr)就是sdshdr的位置
+     * struct sdshdr 结构体中的最后一个 char buf[] 被称为 flexible array member ，
+     * 在计算结构体大小的时候是不记入在内的，
+     * 因此 sizeof(struct sdshdr) 实际上就是 sizeof(int) + sizeof(int)
+     */
+    struct sdshdr *sh = (void*)(s-(sizeof(struct sdshdr))); // 通过s计算sdshdr的指针
     return sh->len;
 }
 
-/*
- * 返回 sds 可用空间的长度
- *
- * T = O(1)
+/**
+ * 返回 sds 可用空间的长度，T = O(1)
+ * 跟上面sdslen一个套路，就不解释了
  */
 static inline size_t sdsavail(const sds s) {
     struct sdshdr *sh = (void*)(s-(sizeof(struct sdshdr)));
     return sh->free;
 }
 
+/**
+ * 下面这些内容在sds.c中详细解释
+ */
 sds sdsnewlen(const void *init, size_t initlen);
 sds sdsnew(const char *init);
 sds sdsempty(void);
